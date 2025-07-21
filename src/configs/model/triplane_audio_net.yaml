@@ -1,0 +1,20 @@
+model:
+  triplane_audio_net:
+    triplane_input_frames: 2
+    triplane_output_frames: 6
+    
+    triplane_feature_dim: ${model.triplane_net.triplane_feature_dim}
+    triplane_resolution: ${model.triplane_net.triplane_resolution}
+
+    smpl_token_len: ${model.triplane_net.smpl_token_len}
+    smpl_token_dim: ${model.triplane_net.smpl_token_dim}
+
+    transformer_layers: 8
+    transformer_head_dim: 64
+    transformer_num_heads: 8
+
+    
+    image_feature_dim: ${model.sapiens_encoder.image_feature_dim}
+    flat_hand_mean: ${dataset.flat_hand_mean}
+    num_expression_coeffs: ${dataset.num_expression_coeffs}
+    audio_feature_dim: ${dataset.audio_feature_dim}

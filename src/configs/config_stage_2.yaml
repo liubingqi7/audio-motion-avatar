@@ -1,0 +1,22 @@
+defaults:
+  - datasets/ted_speech
+  - training/train_stage2
+  - model/ptv3_encoder
+  - model/triplane_net
+  - model/renderer
+  - model/sapiens_encoder
+  - model/triplane_audio_net
+  - _self_
+
+experiment_name: "ted_driven_motion_generation"
+seed: 42
+device: "cuda"
+
+dataset_type: "ted_driven"
+model_type: "TriplaneGaussianAvatar"
+training_mode: "train" 
+
+model:
+  triplane_net:
+    sample_feature: false
+    predict_smplx_params: true

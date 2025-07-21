@@ -1,0 +1,20 @@
+model:
+  ptv3_encoder:
+    # 共享配置值
+    _output_dim: 256
+    _input_dim: ${model.triplane_net.triplane_feature_dim}*3
+    
+    # 使用共享配置值
+    input_dim: ${model.ptv3_encoder._input_dim}
+    output_dim: ${model.ptv3_encoder._output_dim}
+    grid_resolution: 100
+    stride: [2, 2, 2, 2]
+    enc_channels: [32, 64, 128, 256, 512]
+    enc_depths: [2, 2, 2, 6, 2]
+    dec_channels: [256, 128, 256, 512]  # 直接使用数值，避免列表中的变量引用问题
+    dec_depths: [2, 2, 2, 2]
+    enc_num_head: [2, 4, 8, 16, 32]
+    dec_num_head: [4, 4, 8, 16]
+    enc_patch_size: [512, 512, 512, 512, 512]
+    dec_patch_size: [512, 512, 512, 512]
+    enable_flash: false

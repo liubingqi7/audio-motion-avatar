@@ -1,0 +1,15 @@
+defaults:
+  - datasets/thuman
+  - training/train_stage1
+  - model/ptv3_encoder
+  - model/triplane_net
+  - model/renderer
+  - model/sapiens_encoder
+  - _self_
+
+experiment_name: "triplane_reconstruction"
+seed: 42
+
+dataset_type: "thuman"
+model_type: "TriplaneGaussianAvatar"
+training_mode: "train" 

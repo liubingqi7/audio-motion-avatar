@@ -1,0 +1,19 @@
+dataset:
+  name: "ted_speech"
+  type: "GaussianAudioDataset"
+  
+  root_dir: "/home/liubingqi/work/data/clip_2m52s_to_3m10s"
+  audio_file: null
+  wav2vec2_model_path: "/home/liubingqi/work/audio2avatar/gaussian_avatar/wav2vec2-base-960h"
+  audio_feature_dim: 768
+
+  sample_rate: 16000
+  clip_length: 8
+  frame_rate: 24
+  
+  image_size: [1296, 2304]
+  
+  flat_hand_mean: true
+  num_expression_coeffs: 10
+
+  device: "cuda"

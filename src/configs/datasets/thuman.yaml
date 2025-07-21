@@ -1,0 +1,19 @@
+dataset:
+  name: "thuman"
+  type: "ThumanDataset"
+  
+  dataset_root: '/home/liubingqi/work/render/ICON/rendered_thuman'
+  smplx_params_path: '/disk2/liubingqi/data/THuman/thuman2.1_smplx/smplx/'
+  train_list: "/disk2/liubingqi/data/rendered_thuman/train.txt"
+  val_list: "/disk2/liubingqi/data/rendered_thuman/val.txt"
+  test_list: "/disk2/liubingqi/data/rendered_thuman/test.txt"
+  
+  image_size: [1024, 1024]
+  
+  n_test: 8
+  pcd_nums: 30000
+  device: "cuda"
+
+  # dataset specific parameters
+  flat_hand_mean: False
+  num_expression_coeffs: 10

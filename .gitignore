@@ -1,0 +1,23 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Outputs
+outputs/
+outputs_*/
+results/
+checkpoints/
+logs/
+images/
+train_images/
+target_images/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db 

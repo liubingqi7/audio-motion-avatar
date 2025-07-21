@@ -1,0 +1,24 @@
+model:
+  triplane_net:
+    triplane_resolution: 32
+    triplane_feature_dim: 256
+    smplx_model_path: "/home/liubingqi/work/data/SMPL_SMPLX/models_smplx_v1_1/models/smplx"
+    
+    smpl_token_len: 80
+    smpl_token_dim: 256
+    
+    smplx_transformer_layers: 4
+    smplx_transformer_head_dim: 64
+    smplx_transformer_num_heads: 8
+
+    cross_transformer_layers: 8
+    cross_transformer_head_dim: 64
+    cross_transformer_num_heads: 8
+
+    
+    image_feature_dim: ${model.sapiens_encoder.image_feature_dim}
+    flat_hand_mean: ${dataset.flat_hand_mean}
+    num_expression_coeffs: ${dataset.num_expression_coeffs}
+
+    sample_feature: true
+    predict_smplx_params: true  
