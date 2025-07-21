@@ -19,13 +19,13 @@
 ### 模块结构图
 
 #### 总体架构概览
-[图片1：总体overview图]
+![总体架构概览](assets/overview.jpg)
 
 #### Stage 1: 人体表示学习
-[图片2：Stage 1详细pipeline图]
+![Stage 1详细pipeline](assets/stg1.jpg)
 
 #### Stage 2: 音频驱动生成
-[图片3：Stage 2详细pipeline图]
+![Stage 2详细pipeline](assets/stg2.jpg)
 
 ## 代码说明
 
