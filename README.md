@@ -4,6 +4,33 @@
 
 传统的语音驱动人体动作生成通常采用分阶段的方法：首先从语音生成人体动作参数，然后将动作参数渲染为三维人体。这种方法存在两个主要问题：一是两个独立步骤的误差会相互叠加，影响最终效果；二是难以充分利用端到端的训练数据。
 
+本项目采用端到端的训练方式，将语音驱动动作生成和三维人体渲染作为一个整体进行联合优化。这种方法的优势在于：
+1. **端到端优化**：可以充分利用大量训练数据，实现语音到三维人体的直接映射
+2. **避免误差累积**：消除了分阶段方法中误差叠加的问题，提升整体生成质量
+3. **更好的音频-视觉对齐**：通过联合训练，能够更好地保持音频与视觉内容的同步性
+
+## 二阶段Baseline
+
+作为端到端方法的对比，我们实现了一个二阶段Baseline作为对比：
+
+### 第一阶段：EMAGE音频驱动动作生成
+- **方法**：使用EMAGE（Emotional Audio-driven Gesture Generation）方法
+- **特点**：采用自回归（autoregressive）方式根据音频生成对应的全身动作
+- **输入**：音频特征序列
+- **输出**：SMPLX参数序列（包含身体姿态、手部动作、面部表情等）
+
+### 第二阶段：LHM人体渲染
+- **方法**：使用LHM方法
+- **特点**：根据单张人体图像生成canonical人体Gaussian avatar
+- **输入**：人体图像 + SMPLX参数序列
+- **处理**：利用生成的SMPLX参数，采用线性混合蒙皮（LBS）对avatar进行驱动
+- **输出**：渲染的动态视频
+
+### Pipeline流程
+```
+音频输入 → EMAGE → SMPLX参数 → LHM → 渲染视频
+```
+
 ## 技术框架
 
 ### 核心架构
@@ -92,6 +119,38 @@ git clone https://github.com/graphdeco-inria/diff-gaussian-rasterization.git
 cd diff-gaussian-rasterization
 pip install -e .
 ```
+
+### 二阶段环境配置
+
+#### 在baseline目录中配置PantoMatrix和LHM
+
+```bash
+# 进入baseline目录
+cd baseline
+
+# Clone PantoMatrix
+git clone https://github.com/PantoMatrix/PantoMatrix.git
+cd PantoMatrix
+cd ..
+
+# Clone LHM
+git clone https://github.com/aigc3d/LHM.git
+cd LHM
+# 根据CUDA版本选择安装脚本
+sh ./install_cu118.sh  # CUDA 11.8
+# 或
+sh ./install_cu121.sh  # CUDA 12.1
+cd ..
+```
+
+#### PantoMatrix (EMAGE音频驱动动作生成)
+- **项目地址**: [https://github.com/PantoMatrix/PantoMatrix](https://github.com/PantoMatrix/PantoMatrix)
+- **简介**: 开源的语音驱动人体动作生成项目，支持从音频生成SMPLX参数
+- **主要模型**: EMAGE (CVPR 2024) - 全身+面部动画生成
+
+
+#### LHM (Live Human Mesh人体渲染)
+- **项目地址**: [https://github.com/aigc3d/LHM](https://github.com/aigc3d/LHM)
 
 ### 模型准备
 
@@ -184,4 +243,41 @@ python -m src.main2 --config src/configs/config_stage_2.yaml --mode demo \
 **说明**: 使用`--mode demo`进行推理演示，加载指定的checkpoint文件进行音频驱动视频生成。
 
 <!-- ### 模型评估 -->
+
+
+### 二阶段Baseline推理
+
+#### 手动执行三个步骤
+
+**步骤1: EMAGE音频驱动动作生成**
+```bash
+cd baseline/PantoMatrix
+python test_emage_audio.py --visualization --audio_folder ./examples/audio --save_folder ./examples/motion
+```
+
+**步骤2: 动作序列格式转换**
+```bash
+cd baseline/audio_motion_retargeting
+# 修改process_motion_seq.py中的输入输出路径
+python process_motion_seq.py
+```
+
+**步骤3: LHM人体渲染**
+```bash
+cd baseline/LHM
+bash ./inference.sh LHM-500M /path/to/images/ /path/to/motion/smplx_params
+```
+
+#### 注意事项
+
+**环境变量设置**:
+```bash
+# 必须设置的环境变量
+
+export NCCL_IB_DISABLE=1
+export NCCL_P2P_DISABLE=1
+```
+
+
+
 

@@ -21,3 +21,17 @@ target_images/
 # OS
 .DS_Store
 Thumbs.db 
+
+# 忽略baseline中的pytorch3d和sam2子模块内容，只保留文件夹结构
+baseline/pytorch3d/*
+!baseline/pytorch3d/.gitkeep
+
+baseline/sam2/*
+!baseline/sam2/.gitkeep
+
+# 忽略LHM和PantoMatrix的所有内容，只保留文件夹
+baseline/LHM/*
+!baseline/LHM/.gitkeep
+
+baseline/PantoMatrix/*
+!baseline/PantoMatrix/.gitkeep
