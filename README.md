@@ -121,7 +121,6 @@ pip install -e .
 ```
 
 ### 二阶段环境配置
-
 #### 在baseline目录中配置PantoMatrix和LHM
 
 ```bash
@@ -141,6 +140,24 @@ sh ./install_cu118.sh  # CUDA 11.8
 # 或
 sh ./install_cu121.sh  # CUDA 12.1
 cd ..
+```
+
+#### baseline目录结构
+
+```
+baseline/
+├── PantoMatrix/                    # EMAGE音频驱动动作生成 (符号链接)
+│   ├── test_emage_audio.py         # EMAGE推理脚本
+│   ├── examples/                   # 示例音频和输出目录
+│   └── ...
+├── LHM/                           # Live Human Mesh人体渲染
+│   ├── inference.sh               # LHM推理脚本
+│   ├── configs/                   # 配置文件
+│   ├── engine/                    # 引擎组件
+│   ├── LHM/                       # 核心模型代码
+│   └── ...
+├── audio_motion_retargeting/      # 动作序列格式转换
+│   └── process_motion_seq.py      # SMPLX参数处理脚本
 ```
 
 #### PantoMatrix (EMAGE音频驱动动作生成)
