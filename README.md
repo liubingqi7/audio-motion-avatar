@@ -166,7 +166,7 @@ baseline/
 - **主要模型**: EMAGE (CVPR 2024) - 全身+面部动画生成
 
 
-#### LHM (Live Human Mesh人体渲染)
+#### LHM ( Large Animatable Human Reconstruction Model from a Single Image in Seconds人体渲染)
 - **项目地址**: [https://github.com/aigc3d/LHM](https://github.com/aigc3d/LHM)
 
 ### 模型准备
