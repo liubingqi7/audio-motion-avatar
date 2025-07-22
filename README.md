@@ -266,27 +266,6 @@ python -m src.main2 --config src/configs/config_stage_2.yaml --mode demo \
 
 #### 手动执行三个步骤
 
-**步骤1: EMAGE音频驱动动作生成**
-```bash
-cd baseline/PantoMatrix
-python test_emage_audio.py --visualization --audio_folder ./examples/audio --save_folder ./examples/motion
-```
-
-**步骤2: 动作序列格式转换**
-```bash
-cd baseline/audio_motion_retargeting
-# 修改process_motion_seq.py中的输入输出路径
-python process_motion_seq.py
-```
-
-**步骤3: LHM人体渲染**
-```bash
-cd baseline/LHM
-bash ./inference.sh LHM-500M /path/to/images/ /path/to/motion/smplx_params
-```
-
-#### 注意事项
-
 **环境变量设置**:
 ```bash
 # 必须设置的环境变量
@@ -294,6 +273,30 @@ bash ./inference.sh LHM-500M /path/to/images/ /path/to/motion/smplx_params
 export NCCL_IB_DISABLE=1
 export NCCL_P2P_DISABLE=1
 ```
+
+**步骤1: EMAGE音频驱动动作生成**
+
+通过修改命令行参数指定音频路径和动作输出路径
+```bash
+cd baseline/PantoMatrix
+python test_emage_audio.py --visualization --audio_folder ./examples/audio --save_folder ../examples_motion/
+```
+
+**步骤2: 动作序列格式转换**
+```bash
+cd baseline/audio_motion_retargeting
+# 修改process_motion_seq.py中的输入输出路径
+python process_motion_seq.py --moiton_folder ../examples_motion/
+```
+
+**步骤3: LHM人体渲染**
+
+设定/path/to/images为retarget的目标的图片，/path/to/motion/smplx_params为步骤2中输出动作的路径。
+```bash
+cd baseline/LHM
+bash ./inference.sh LHM-500M /path/to/images/ /path/to/motion/smplx_params
+```
+
 
 
 

@@ -4,8 +4,18 @@ import os
 import glob
 from scipy.spatial.transform import Rotation as R
 
-input_dir = "/home/liubingqi/work/audio_motion_avatar/baseline/PantoMatrix/examples/motion"
-output_base_dir = "tmp_data/output_motion_pretrain"
+import argparse
+
+parser = argparse.ArgumentParser(description="处理动作序列文件")
+parser.add_argument('--moiton_folder', type=str, required=True, help='输入动作npz文件夹路径')
+parser.add_argument('--output_folder', type=str, required=True, help='输出动作序列文件夹路径')
+args = parser.parse_args()
+
+input_dir = args.moiton_folder
+if args.output_folder is None:
+    output_base_dir = "tmp_data/output_motion_pretrain"
+else:
+    output_base_dir = args.output_folder
 
 npz_files = glob.glob(os.path.join(input_dir, "*.npz"))
 print(f"找到 {len(npz_files)} 个npz文件需要处理")
