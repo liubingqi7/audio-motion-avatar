@@ -176,6 +176,10 @@ baseline/
 - [Wav2Vec2模型](https://huggingface.co/facebook/wav2vec2-base-960h) - 自动下载
 - [Sapiens模型](https://github.com/facebookresearch/sapiens) - 下载sapiens_1b_epoch_173_torchscript.pt2
 
+**训练checkpoint**
+
+压缩文件中的checkpoint为在ted演讲视频clip数据上训练的完整checkpoint：audio_motion_avatar_full.ckpt，后续的inference中直接load该checkpoint即可得到。
+
 **模型文件路径配置**:
 ```yaml
 # SMPLX模型路径 (在 src/configs/model/triplane_net.yaml 中)
@@ -254,7 +258,7 @@ python -m src.main2 --config src/configs/config_stage_2.yaml --mode train
 ```bash
 # 使用训练好的模型进行推理测试
 python -m src.main2 --config src/configs/config_stage_2.yaml --mode demo \
-    --checkpoint /home/liubingqi/work/audio2avatar/gaussian_avatar/results_4d_615_with_cache/checkpoints/last.ckpt
+    --checkpoint audio_motion_avatar_full.ckpt
 ```
 
 **说明**: 使用`--mode demo`进行推理演示，加载指定的checkpoint文件进行音频驱动视频生成。
