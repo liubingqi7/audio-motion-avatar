@@ -1,0 +1,15 @@
+defaults:
+  - datasets/idol
+  - training/train_stage1
+  - model/ptv3_encoder
+  - model/triplane_net
+  - model/renderer
+  - model/sapiens_encoder
+  - _self_
+
+experiment_name: "triplane_reconstruction"
+seed: 42
+
+dataset_type: "idol"
+model_type: "TriplaneGaussianAvatar"
+training_mode: "train" 

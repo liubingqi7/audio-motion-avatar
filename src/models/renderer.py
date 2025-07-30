@@ -6,7 +6,7 @@ from smplx import SMPLX
 from src.models.point_transformer.point_encoder import PTv3Encoder
 import einops
 from src.utils.math_utils import inverse_sigmoid
-
+from src.utils.graphic_utils import visualize_feature_maps
 
 class Renderer(nn.Module):
     def __init__(self, cfg: DictConfig = None, smpl_decoder=None):
@@ -16,6 +16,9 @@ class Renderer(nn.Module):
 
         if cfg.predict_smplx_params:
             self.smpl_decoder = smpl_decoder
+
+        if cfg.upsample_triplane:
+            self.triplane_upsampler = TriplaneUpsampler(cfg)
         
         if not cfg.no_point_refiner:
             self.point_encoder = PTv3Encoder(
@@ -65,6 +68,11 @@ class Renderer(nn.Module):
             Hp=self.cfg.triplane_resolution,
             Wp=self.cfg.triplane_resolution,
         )
+
+        if self.cfg.upsample_triplane:
+            triplane_features = self.triplane_upsampler(triplane_features)
+
+        # visualize_feature_maps(triplane_features, save_dir='./triplane_visualization', save_name='triplane_features', batch_idx=0, num_channels=3, normalize=True)
 
         smpl_tokens = einops.rearrange(smpl_tokens, 'b t c s -> (b t) c s')
         if self.smpl_decoder is not None:
@@ -171,13 +179,13 @@ class Renderer(nn.Module):
         
         vertices = output.vertices
         
-        # B, N, _ = vertices.shape
-        # faces = self.smplx_model.faces
-        # face_verts = vertices[:, faces]  # [B, F, 3, 3]
-        # face_centers = face_verts.mean(dim=2)  # [B, F, 3]
-        # densified_verts = torch.cat([vertices, face_centers], dim=1)  # [B, N+F, 3]
+        B, N, _ = vertices.shape
+        faces = self.smplx_model.faces
+        face_verts = vertices[:, faces]  # [B, F, 3, 3]
+        face_centers = face_verts.mean(dim=2)  # [B, F, 3]
+        densified_verts = torch.cat([vertices, face_centers], dim=1)  # [B, N+F, 3]
         
-        # vertices = densified_verts
+        vertices = densified_verts
 
         return vertices
     
@@ -187,7 +195,7 @@ class Renderer(nn.Module):
             triplane_features = triplane_features[None, ...]
             points = points[None, ...]
         
-        positions = torch.clamp(points / 2.0, -1, 1)
+        positions = torch.clamp(points / self.cfg.radius, -1, 1)
         
         indices2D = torch.stack(
             (positions[..., [0, 1]], positions[..., [0, 2]], positions[..., [1, 2]]),
@@ -236,6 +244,77 @@ class Renderer(nn.Module):
         }
         
         return gaussians
+    
+class ResBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, norm_layer=nn.BatchNorm2d):
+        super().__init__()
+        self.block = nn.Sequential(
+            norm_layer(in_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels, out_channels, 3, padding=1),
+            norm_layer(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, 3, padding=1),
+        )
+        self.skip = nn.Conv2d(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
+
+    def forward(self, x):
+        return self.skip(x) + self.block(x)
+
+class UpsampleBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, scale_factor=2):
+        super().__init__()
+        self.upsample = nn.Sequential(
+            nn.Upsample(scale_factor=scale_factor, mode='nearest'),
+            nn.Conv2d(in_channels, out_channels, 3, padding=1),
+            nn.ReLU(inplace=True),
+            ResBlock(out_channels, out_channels)
+        )
+
+    def forward(self, x):
+        return self.upsample(x)
+    
+class TriplaneUpsampler(nn.Module):
+    def __init__(self, cfg: DictConfig):
+        super(TriplaneUpsampler, self).__init__()
+        self.cfg = cfg
+        self.in_channels = cfg.triplane_feature_dim
+        self.out_channels = cfg.triplane_feature_dim
+        self.num_upsample_blocks = cfg.num_upsample_blocks
+        
+        self.upsample_blocks = nn.ModuleList([
+            UpsampleBlock(self.in_channels, self.out_channels, scale_factor=2)
+            for i in range(self.num_upsample_blocks)
+        ])
+        
+        self.skip_connections = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(self.in_channels, self.out_channels, 1) if i == 0 else nn.Identity(),
+                nn.Upsample(scale_factor=2, mode='nearest')
+            )
+            for i in range(self.num_upsample_blocks)
+        ])
+        
+    def forward(self, triplanes):
+        # triplanes: B, 3, C, H, W
+        B, num_planes, C, H, W = triplanes.shape
+        
+        triplanes_flat = triplanes.reshape(B * num_planes, C, H, W)
+        
+        current_triplanes = triplanes_flat
+        skip = current_triplanes
+        for i, (upsample_block, skip_conn) in enumerate(zip(self.upsample_blocks, self.skip_connections)):
+            upsampled = upsample_block(current_triplanes)
+            
+            skip = skip_conn(skip)
+            
+            # print(f"upsampled shape: {upsampled.shape}, skip shape: {skip.shape}")
+
+            current_triplanes = upsampled + skip
+        
+        result = current_triplanes.reshape(B, num_planes, C, 2**self.cfg.num_upsample_blocks*H, 2**self.cfg.num_upsample_blocks*W)
+        
+        return result
 
 
 ### Gaussian Splatting Renderer ###

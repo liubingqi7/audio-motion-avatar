@@ -1,6 +1,7 @@
 import os
 import torch
 import lightning as L
+import omegaconf
 from omegaconf import OmegaConf, DictConfig
 import argparse
 
@@ -94,24 +95,33 @@ def main():
     
     if args.mode == "train":
         print("start training...")
-        
+         
         if cfg.training.resume and cfg.training.ckpt:
             print(f"resume training from checkpoint: {cfg.training.ckpt}")
-            checkpoint = torch.load(cfg.training.ckpt)
-            model.load_state_dict(checkpoint['state_dict'], strict=False)
+
+            checkpoint = torch.load(cfg.training.ckpt, weights_only=False, map_location='cpu')
+            if 'state_dict' in checkpoint:
+                triplane_gaussian_state_dict = {k.replace('triplane_gaussian.', ''): v for k, v in checkpoint['state_dict'].items() 
+                                          if k.startswith('triplane_gaussian.') and 'sapiens_encoder' not in k}
+                model.triplane_gaussian.load_state_dict(triplane_gaussian_state_dict, strict=False)
             print("loaded model weights")
             
         trainer.fit(model, train_loader, val_loader)
         
         print("training completed, start testing...")
-        trainer.test(model, val_loader)
+        # trainer.test(model, val_loader)
         
     elif args.mode == "test":
-        if args.checkpoint is None:
-            raise ValueError("test mode requires checkpoint file path")
-        
-        print(f"loading checkpoint: {args.checkpoint}")
-        model = TriplaneGaussianAvatarLightning.load_from_checkpoint(args.checkpoint, cfg=cfg)
+        print(f"loading checkpoint: {cfg.training.ckpt}")
+        if cfg.training.resume and cfg.training.ckpt:
+            print(f"resume training from checkpoint: {cfg.training.ckpt}")
+
+            checkpoint = torch.load(cfg.training.ckpt, weights_only=False, map_location='cpu')
+            if 'state_dict' in checkpoint:
+                triplane_gaussian_state_dict = {k.replace('triplane_gaussian.', ''): v for k, v in checkpoint['state_dict'].items() 
+                                          if k.startswith('triplane_gaussian.') and 'sapiens_encoder' not in k}
+                model.triplane_gaussian.load_state_dict(triplane_gaussian_state_dict, strict=False)
+            print("loaded model weights")
         trainer.test(model, val_loader)
         
     elif args.mode == "predict":

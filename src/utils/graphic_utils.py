@@ -318,6 +318,16 @@ def points_projection(points: torch.Tensor,
     local_features_proj[points_to_visible_pixels] = local_features[visible_pixels]
     local_features_proj = local_features_proj.reshape(B, Np, C)
 
+    # visible_mask = (fragments_idx[..., 0] > -1).to(torch.uint8)  # [B, H, W]
+
+    # plt.figure(figsize=(6, 6))
+    # plt.imshow(visible_mask[0].detach().cpu().numpy(), cmap='gray')
+    # plt.title("Visible Pixel Mask (1=visible, 0=hidden)")
+    # plt.axis('off')
+    # plt.savefig("visible_mask.png", bbox_inches='tight')
+    # print(f"[✓] Saved mask visualization to: visible_mask.png")
+    # plt.close()
+
     return local_features_proj
     
 
@@ -932,3 +942,69 @@ def draw_smplx_on_image(
         results.append(combined)
 
     return np.stack(results, axis=0)
+
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+
+
+def visualize_feature_maps(triplane: torch.Tensor, save_dir: str, save_name: str, batch_idx: int, num_channels: int = 3, normalize: bool = True, mode: str = 'pca'):
+    """
+    Visualize and save triplane slices.
+    
+    Args:
+        triplane (Tensor): [B, 3, C, H, W] tensor
+        num_channels (int): Number of channels per plane to visualize
+        batch_idx (int): Batch index to visualize
+        normalize (bool): Normalize each feature map to [0, 1]
+        save_dir (str): Directory to save the output image
+    """
+    assert triplane.ndim == 5, "Expected shape [B, 3, C, H, W]"
+    assert batch_idx < triplane.shape[0], f"Invalid batch_idx {batch_idx}"
+    C = triplane.shape[2]
+    num_channels = min(num_channels, C)
+
+    os.makedirs(save_dir, exist_ok=True)
+    planes = ['xy', 'xz', 'yz']
+    triplane = triplane[batch_idx].detach().cpu()  # [3, C, H, W]
+
+    fig, axs = plt.subplots(nrows=3, ncols=num_channels, figsize=(4 * num_channels, 10))
+
+    if mode == 'channel':
+        for plane_idx in range(3):
+            for ch in range(num_channels):
+                feat = triplane[plane_idx, ch]
+                if normalize and feat.max() > feat.min():
+                    feat = (feat - feat.min()) / (feat.max() - feat.min() + 1e-6)
+
+                ax = axs[plane_idx, ch] if num_channels > 1 else axs[plane_idx]
+                im = ax.imshow(feat.numpy(), cmap='seismic', origin='lower')
+                fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+                ax.set_title(f"{planes[plane_idx]} | Channel {ch}")
+
+                # 可视化统计信息
+                mean_val = feat.mean().item()
+                ax.text(0.05, 0.95, f"mean={mean_val:.2f}", color='white',
+                        fontsize=8, ha='left', va='top', transform=ax.transAxes)
+    elif mode == "pca":
+        triplane_sample = triplane
+        for plane_idx in range(3):
+            C, H, W = triplane_sample[plane_idx].shape
+            feature_map = triplane_sample[plane_idx].reshape(C, -1).T
+
+            pca = PCA(n_components=num_channels)
+            reduced = pca.fit_transform(feature_map).reshape(H, W, num_channels)
+            for ch in range(num_channels):
+                feat = reduced[:, :, ch]
+                if normalize and feat.max() > feat.min():
+                    feat = (feat - feat.min()) / (feat.max() - feat.min() + 1e-6)
+
+                ax = axs[plane_idx, ch] if num_channels > 1 else axs[plane_idx]
+                im = ax.imshow(feat, cmap='seismic', origin='lower')
+                fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+                ax.set_title(f"{planes[plane_idx]} | Channel {ch}")
+        
+    plt.tight_layout()
+    save_path = os.path.join(save_dir, f"{save_name}_batch{batch_idx}.png")
+    plt.savefig(save_path)
+    print(f"[✓] Saved triplane visualization to: {save_path}")
+    plt.close()

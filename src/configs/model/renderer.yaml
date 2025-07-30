@@ -2,10 +2,14 @@ model:
   renderer:
     triplane_resolution: ${model.triplane_net.triplane_resolution}
     triplane_feature_dim: ${model.triplane_net.triplane_feature_dim}
+    radius: ${model.triplane_net.radius}
     smplx_model_path: ${model.triplane_net.smplx_model_path}
     flat_hand_mean: ${model.triplane_net.flat_hand_mean}
     num_expression_coeffs: ${model.triplane_net.num_expression_coeffs}
     
+    upsample_triplane: true
+    num_upsample_blocks: 3
+
     predict_smplx_params: true
     no_point_refiner: false
     use_gaussian_splatting: true

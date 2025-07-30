@@ -2,7 +2,11 @@ model:
   triplane_net:
     triplane_resolution: 32
     triplane_feature_dim: 256
+    radius: 1.4
     smplx_model_path: "/home/liubingqi/work/data/SMPL_SMPLX/models_smplx_v1_1/models/smplx"
+
+    upsample_triplane: false
+    upsample_factor: 4
     
     smpl_token_len: 80
     smpl_token_dim: 256

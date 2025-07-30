@@ -16,4 +16,4 @@ dataset:
   flat_hand_mean: true
   num_expression_coeffs: 10
 
-  device: "cuda"
+  device: "cuda"  

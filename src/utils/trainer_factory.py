@@ -30,6 +30,7 @@ class TrainerFactory:
             max_epochs=training_cfg.max_epochs if hasattr(training_cfg, 'max_epochs') else 100,
             accelerator="gpu" if torch.cuda.is_available() else "cpu",
             devices=training_cfg.devices if hasattr(training_cfg, 'devices') else 1,
+            strategy=training_cfg.strategy if hasattr(training_cfg, 'strategy') else "auto",
             logger=logger,
             callbacks=callbacks,
             log_every_n_steps=training_cfg.log_every_n_steps if hasattr(training_cfg, 'log_every_n_steps') else 10,
@@ -39,6 +40,8 @@ class TrainerFactory:
             enable_progress_bar=True,
             enable_model_summary=True,
             enable_checkpointing=True,
+            fast_dev_run=training_cfg.fast_dev_run if hasattr(training_cfg, 'fast_dev_run') else False,
+            accumulate_grad_batches=training_cfg.gradient_accumulate_steps if hasattr(training_cfg, 'gradient_accumulate_steps') else 1,
         )
         
         return trainer
@@ -74,12 +77,26 @@ class TrainerFactory:
         output_dir = training_cfg.output_dir if hasattr(training_cfg, 'output_dir') else "./outputs"
         experiment_name = cfg.experiment_name if hasattr(cfg, 'experiment_name') else "experiment"
         
+        # 从配置中获取monitor设置，默认为"val/loss"
+        monitor = "val/loss_total"
+        mode = "min"
+        save_top_k = 2
+        
+        if hasattr(training_cfg, 'validation'):
+            validation_cfg = training_cfg.validation
+            if hasattr(validation_cfg, 'monitor'):
+                monitor = validation_cfg.monitor
+            if hasattr(validation_cfg, 'mode'):
+                mode = validation_cfg.mode
+            if hasattr(validation_cfg, 'save_top_k'):
+                save_top_k = validation_cfg.save_top_k
+        
         checkpoint_callback = ModelCheckpoint(
             dirpath=os.path.join(output_dir, "checkpoints"),
-            filename=f"{experiment_name}-{{epoch:02d}}-{{val_loss:.4f}}",
-            monitor="val/loss",
-            mode="min",
-            save_top_k=3,
+            filename=f"{experiment_name}-{{epoch:02d}}-{{val_loss_total:.4f}}",
+            monitor=monitor,
+            mode=mode,
+            save_top_k=save_top_k,
             save_last=True,
             every_n_epochs=1
         )

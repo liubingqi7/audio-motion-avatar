@@ -1037,36 +1037,36 @@ if __name__ == "__main__":
     # print(sample['cond_intrinsics_matrix'].shape)
     # print(sample['cond_poses'].shape)
 
-    from src.utils.graphics_utils import init_smplx_model, SimpleMeshRenderer
-    smplx_model = init_smplx_model(device=sample['cond_imgs'].device,
-                                   num_expression_coeffs=10,
-                                   num_betas=10,
-                                   num_pca_comps=12,
-                                   flat_hand_mean=False,
-                                   use_pca=False,
-                                   create_body_pose=False,
-                                   create_betas=False,
-                                   create_global_orient=False)
-    renderer = SimpleMeshRenderer(smplx_model.faces, 896, 640)
+    # from src.utils.graphics_utils import init_smplx_model, SimpleMeshRenderer
+    # smplx_model = init_smplx_model(device=sample['cond_imgs'].device,
+    #                                num_expression_coeffs=10,
+    #                                num_betas=10,
+    #                                num_pca_comps=12,
+    #                                flat_hand_mean=False,
+    #                                use_pca=False,
+    #                                create_body_pose=False,
+    #                                create_betas=False,
+    #                                create_global_orient=False)
+    # renderer = SimpleMeshRenderer(smplx_model.faces, 896, 640)
 
-    K = sample['cond_intrinsics_matrix'][0].reshape(3, 3)
-    E = sample['cond_poses'][0].reshape(4, 4)
-    device = next(smplx_model.parameters()).device
+    # K = sample['cond_intrinsics_matrix'][0].reshape(3, 3)
+    # E = sample['cond_poses'][0].reshape(4, 4)
+    # device = next(smplx_model.parameters()).device
 
-    params = {}
-    for key, tensor in sample['cond_smpl_params'][0].items():
-        params[key] = tensor.to(device).reshape(1, -1)
+    # params = {}
+    # for key, tensor in sample['cond_smpl_params'][0].items():
+    #     params[key] = tensor.to(device).reshape(1, -1)
 
-    with torch.no_grad():
-        out = smplx_model(global_orient=params['global_orient'], body_pose=params['body_pose'], betas=params['betas'], left_hand_pose=params['left_hand_pose'],
-               right_hand_pose=params['right_hand_pose'], jaw_pose=params['jaw_pose'], leye_pose=params['leye_pose'], reye_pose=params['reye_pose'],
-               expression=params['expression'])
-        verts = out.vertices.detach() 
+    # with torch.no_grad():
+    #     out = smplx_model(global_orient=params['global_orient'], body_pose=params['body_pose'], betas=params['betas'], left_hand_pose=params['left_hand_pose'],
+    #            right_hand_pose=params['right_hand_pose'], jaw_pose=params['jaw_pose'], leye_pose=params['leye_pose'], reye_pose=params['reye_pose'],
+    #            expression=params['expression'])
+    #     verts = out.vertices.detach() 
     
-    rendered = renderer.render_mesh(verts[0], sample['cond_imgs'][0].cpu().numpy().transpose(1, 2, 0), K, E)
-    rendered_uint8 = (np.clip(rendered, 0.0, 1.0) * 255).astype(np.uint8)
-    Image.fromarray(rendered_uint8).save("rendered.png")
-    ori_img = sample['cond_imgs'][0].cpu().numpy().transpose(1, 2, 0)
-    ori_img = (np.clip(ori_img, 0.0, 1.0) * 255).astype(np.uint8)
-    Image.fromarray(ori_img).save("ori_img.png")
+    # rendered = renderer.render_mesh(verts[0], sample['cond_imgs'][0].cpu().numpy().transpose(1, 2, 0), K, E)
+    # rendered_uint8 = (np.clip(rendered, 0.0, 1.0) * 255).astype(np.uint8)
+    # Image.fromarray(rendered_uint8).save("rendered.png")
+    # ori_img = sample['cond_imgs'][0].cpu().numpy().transpose(1, 2, 0)
+    # ori_img = (np.clip(ori_img, 0.0, 1.0) * 255).astype(np.uint8)
+    # Image.fromarray(ori_img).save("ori_img.png")
         

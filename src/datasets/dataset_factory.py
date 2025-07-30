@@ -126,7 +126,7 @@ class DatasetFactory:
             batch_size = cfg.training.batch_size
             shuffle = True
         else:
-            batch_size = cfg.training.batch_size // 2
+            batch_size = 1
             shuffle = False
         
         return DataLoader(

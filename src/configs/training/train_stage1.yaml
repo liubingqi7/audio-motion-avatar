@@ -1,8 +1,9 @@
 training:
-  max_epochs: 20
-  batch_size: 2
+  max_epochs: 500
+  batch_size: 1
   learning_rate: 1e-4
-  total_steps: 100000
+  total_steps: 30000
+  gradient_accumulate_steps: 2
 
   optimizer:
     type: "Adam"
@@ -12,7 +13,7 @@ training:
   scheduler:
     type: "LinearLR"
     start_factor: 1.0
-    end_factor: 0.01
+    end_factor: 0.1
 
   dataloader:
     num_workers: 4
@@ -21,8 +22,8 @@ training:
 
   validation:
     val_every_n_epoch: 1
-    save_top_k: 3
-    monitor: "val/loss"
+    save_top_k: 1
+    monitor: "val/loss_total"
     mode: "min"
 
   logging:
@@ -31,14 +32,17 @@ training:
     wandb_project: "audio_motion_avatar"
     wandb_run_name: null
 
-  output_dir: "outputs_reconstruction"
+  output_dir: "outputs_reconstruction_729"
   experiment_name: "triplane_reconstruction"
 
   device: "cuda"
-  devices: 1
+  devices: 3
+  strategy: "ddp"
   accelerator: "gpu"
 
   seed: 42
 
-  resume: false
-  ckpt: "/home/liubingqi/work/gaussian_avatars/results_718_thuman_ori/checkpoints/last.ckpt"
+  resume: true
+  ckpt: "/home/liubingqi/work/audio_motion_avatar/outputs_reconstruction_729/checkpoints/last-v1.ckpt"
+
+  fast_dev_run: false

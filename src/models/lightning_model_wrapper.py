@@ -67,14 +67,14 @@ class TriplaneGaussianAvatarLightning(L.LightningModule):
         self.writer = None  # TensorBoard writer
         self.use_wandb = training_cfg.use_wandb if hasattr(training_cfg, 'use_wandb') else False
 
-        self.lpips_loss = LPIPS()
+        # self.lpips_loss = LPIPS()
         self.l1_loss = l1_loss
         self.ssim_loss = ssim
         self.smplx_param_loss = smplx_param_loss
 
     def on_save_checkpoint(self, checkpoint) -> None:
         state_dict = checkpoint.get("state_dict", {})
-        keys_to_remove = [k for k in state_dict if k.startswith("model.sapiens_encoder.")]
+        keys_to_remove = [k for k in state_dict if k.startswith("triplane_gaussian.sapiens_encoder.")]
         for k in keys_to_remove:
             state_dict.pop(k, None)
         checkpoint["state_dict"] = state_dict
@@ -148,7 +148,12 @@ class TriplaneGaussianAvatarLightning(L.LightningModule):
             losses['ssim_test'] = torch.tensor(0.0, device=self.device)
             loss_test = torch.tensor(0.0, device=self.device)
 
-        loss = loss_train + loss_test + 0.01 * loss_smplx
+        pred_xyz = gaussians['xyz']
+        pcd_points = ref_batch.pcd_points.to(self.device)
+        chamfer_loss, _ = chamfer_distance(pred_xyz, pcd_points)
+        self.log('train/chamfer_loss', chamfer_loss, prog_bar=True)
+
+        loss = loss_train + loss_test + 0.01 * loss_smplx + 50 * chamfer_loss
         
         self.log('train/l1_loss_train', losses['l1_train'], prog_bar=True)
         self.log('train/ssim_loss_train', losses['ssim_train'], prog_bar=False)
@@ -160,7 +165,7 @@ class TriplaneGaussianAvatarLightning(L.LightningModule):
         self.log('train/learning_rate', current_lr, prog_bar=False)
         self.log('train/loss', loss, prog_bar=False)
 
-        if self.global_step % 1000 == 0 and self.global_rank == 0:
+        if self.global_step % 500 == 0 and self.global_rank == 0:
             self._save_training_images(ref_images, rendered_images, batch_idx, test_images, rendered_images_target)
 
         return loss
@@ -209,6 +214,125 @@ class TriplaneGaussianAvatarLightning(L.LightningModule):
                 normalize=True
             )
 
+    def test_step(self, batch, batch_idx):
+        self.triplane_gaussian.train() 
+        ref_batch, test_batch, _ = batch
+        
+        ref_images = ref_batch.video.to(self.device)
+        test_images = test_batch.video.to(self.device)
+
+        for k, v in ref_batch.smpl_parms.items():
+            ref_batch.smpl_parms[k] = v.to(self.device)
+        for k, v in ref_batch.cam_parms.items():
+            ref_batch.cam_parms[k] = v.to(self.device)
+
+        for k, v in test_batch.smpl_parms.items():
+            test_batch.smpl_parms[k] = v.to(self.device)
+        for k, v in test_batch.cam_parms.items():
+            test_batch.cam_parms[k] = v.to(self.device)
+
+        (
+            rendered_images, 
+            gaussians, 
+            fused_triplane_tokens, 
+            image_tokens, 
+            pred_smpl_1, 
+            pred_smpl_2, 
+            smpl_tokens
+        ) = self.triplane_gaussian(ref_images, ref_batch.smpl_parms, ref_batch.cam_parms)
+
+        rendered_images_target = None
+        if test_images is not None:
+            B, T = test_images.shape[0], test_images.shape[1]
+            
+            intrinsic_list = []
+            extrinsic_list = []
+            
+            for b in range(B):
+                for t in range(T):
+                    curr_intrinsic = test_batch.cam_parms['intrinsic'][b:b+1, t:t+1]
+                    curr_extrinsic = test_batch.cam_parms['extrinsic'][b:b+1, t:t+1]
+                    
+                    intrinsic_list.append(curr_intrinsic)
+                    extrinsic_list.append(curr_extrinsic)
+
+            intrinsic = torch.cat(intrinsic_list, dim=1).reshape(B, T, 3, 3)
+            extrinsic = torch.cat(extrinsic_list, dim=1).reshape(B, T, 4, 4)
+
+            args = type('Args', (), {
+                'image_size': self.cfg.model.renderer.image_size,
+                'rgb': True,
+                'sh_degree': 3
+            })()
+            rendered_images_target = render_multi_view(gaussians, intrinsic, extrinsic, args)
+        
+        losses = {}
+        
+        losses['smplx_param_loss'] = smplx_param_loss(pred_smpl_1, ref_batch.smpl_parms)[0] + smplx_param_loss(pred_smpl_2, ref_batch.smpl_parms)[0]
+        
+        losses['l1_train'] = l1_loss(rendered_images, ref_images.permute(0, 1, 3, 4, 2))
+        losses['ssim_train'] = 1 - ssim(rendered_images, ref_images.permute(0, 1, 3, 4, 2))
+        
+        if test_images is not None and rendered_images_target is not None:
+            losses['l1_test'] = l1_loss(rendered_images_target, test_images.permute(0, 1, 3, 4, 2))
+            losses['ssim_test'] = 1 - ssim(rendered_images_target, test_images.permute(0, 1, 3, 4, 2))
+        else:
+            losses['l1_test'] = torch.tensor(0.0, device=self.device)
+            losses['ssim_test'] = torch.tensor(0.0, device=self.device)
+
+        self._save_test_images(ref_images, rendered_images, batch_idx, test_images, rendered_images_target)
+
+        # print(f"test/l1_loss_train: {losses['l1_train']}, test/ssim_loss_train: {losses['ssim_train']}, test/l1_loss_test: {losses['l1_test']}, test/ssim_loss_test: {losses['ssim_test']}, test/smplx_param_loss: {loss_smplx}")
+
+        self.log_dict({f"test/{k}": v for k, v in losses.items()}, prog_bar=True, on_step=False, on_epoch=True)
+
+        return losses
+
+    def _save_test_images(self, ref_images, rendered_images, batch_idx, test_images=None, rendered_images_target=None):
+        B, T, _, H, W = ref_images.shape
+        
+        all_images = []
+        ref_images_permuted = ref_images.permute(0, 1, 3, 4, 2).reshape(1, B, T, H, W, 3)
+        rendered_images_reshaped = rendered_images.reshape(1, B, T, H, W, 3)
+        
+        for frame_idx in range(ref_images_permuted.shape[1]):
+            for t in range(T):
+                real_image = ref_images_permuted[0, frame_idx, t]
+                rendered_image = rendered_images_reshaped[0, frame_idx, t]
+                combined = torch.cat([rendered_image, real_image], dim=1)
+            all_images.append(combined)
+        
+        images = torch.cat(all_images, dim=0)
+        
+        output_dir = self.cfg.training.output_dir if hasattr(self.cfg, 'training') and hasattr(self.cfg.training, 'output_dir') else "./outputs"
+        os.makedirs(os.path.join(output_dir, "test_images"), exist_ok=True)
+        
+        images_chw = images.detach().cpu().permute(2, 0, 1)
+        vutils.save_image(
+            images_chw,
+            os.path.join(output_dir, f"test_images/triplane_comparison_{batch_idx}.png"),
+            normalize=True
+        )
+        
+        if test_images is not None and rendered_images_target is not None:
+            target_all_images = []
+            for frame_idx in range(test_images.shape[1]):
+                real_target_image = test_images[0, frame_idx].permute(1, 2, 0)
+                rendered_target_image = rendered_images_target[0, frame_idx]
+                target_combined = torch.cat([rendered_target_image, real_target_image], dim=1)
+                target_all_images.append(target_combined)
+            
+            target_images_combined = torch.cat(target_all_images, dim=0)
+            
+            os.makedirs(os.path.join(output_dir, "target_images"), exist_ok=True)
+            target_images_chw = target_images_combined.detach().cpu().permute(2, 0, 1)
+            vutils.save_image(
+                target_images_chw,
+                os.path.join(output_dir, f"test_images/target_comparison_{batch_idx}.png"),
+                normalize=True
+            )
+        
+
     def validation_step(self, batch, batch_idx):
         ref_batch, test_batch, _ = batch
         
@@ -228,7 +352,14 @@ class TriplaneGaussianAvatarLightning(L.LightningModule):
         # loss_dict["lpips"] = self.lpips_loss(rendered_images, ref_images.permute(0, 1, 3, 4, 2))
         loss_dict["total"] = loss_dict["l1"] + 0.1 * loss_dict["ssim"] # + 0.1 * loss_dict["lpips"]
 
-        self.log_dict({f"val/{k}": v for k, v in loss_dict.items()}, prog_bar=True, on_step=False, on_epoch=True)
+        # 添加val/loss用于ModelCheckpoint监控
+        loss_dict["loss"] = loss_dict["total"]
+
+        self.log("val/loss_l1_train", loss_dict["l1"], prog_bar=True, on_step=False, on_epoch=True)
+        self.log("val/loss_ssim_train", loss_dict["ssim"], prog_bar=True, on_step=False, on_epoch=True)
+        self.log("val/loss_total", loss_dict["total"], prog_bar=True, on_step=False, on_epoch=True)
+
+        # print(f"val/loss_l1_train: {loss_dict['l1']}, val/loss_ssim_train: {loss_dict['ssim']}, val/loss_total: {loss_dict['total']}")
 
         return loss_dict["total"]
 

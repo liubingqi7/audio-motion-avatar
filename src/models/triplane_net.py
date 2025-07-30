@@ -7,7 +7,7 @@ from omegaconf import DictConfig
 
 from src.models.tokenizers import TriplaneLearnablePositionalEmbedding
 from src.models.transformers import Transformer1D_nn
-from src.utils.graphic_utils import points_projection
+from src.utils.graphic_utils import points_projection, visualize_feature_maps
 from src.models.smplx_decoder import SMPLXDecoder
 
 class ResnetBlockFC(nn.Module):
@@ -78,6 +78,9 @@ class SMPLXTriplaneEncoder(nn.Module):
         else:
             self.vertex_emb = nn.Embedding(self.num_verts, cfg.triplane_feature_dim)
 
+        if cfg.upsample_triplane:
+            self.triplane_downsampler = TriplaneDownsampler(cfg)
+
         if cfg.predict_smplx_params:
             # smplx predictor
             self.smpl_token_len = cfg.smpl_token_len
@@ -95,7 +98,7 @@ class SMPLXTriplaneEncoder(nn.Module):
                 cross_attention_dim=cfg.image_feature_dim,
                 norm_type="layer_norm",
                 enable_memory_efficient_attention=False,
-                gradient_checkpointing=True
+                gradient_checkpointing=False
             )
                     
             self.smpl_decoder = smpl_decoder
@@ -125,6 +128,17 @@ class SMPLXTriplaneEncoder(nn.Module):
             cam_extrinsic = cam_params['extrinsic'].reshape(B*T, 4, 4)
             cam_intrinsic = cam_params['intrinsic'].reshape(B*T, 3, 3)
             sampled_features = points_projection(verts_with_trans, cam_extrinsic, cam_intrinsic, img_feature)
+            rgb = sampled_features[..., :3]
+            print(rgb.shape)
+            print(verts.shape)
+
+            # save verts and rgb as ply file
+            import open3d as o3d
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(verts[0].cpu().numpy())
+            pcd.colors = o3d.utility.Vector3dVector(rgb[0].cpu().numpy())
+            o3d.io.write_point_cloud("verts_rgb.ply", pcd)
+
             verts_feat = torch.cat([verts_emb, sampled_features], dim=-1)
         else:
             verts_feat = verts_emb
@@ -134,10 +148,20 @@ class SMPLXTriplaneEncoder(nn.Module):
 
         coord = {}
         index = {}
-        position = torch.clamp(verts, -2.0 + 1e-6, 2.0 - 1e-6)
+        position = torch.clamp(verts, -self.cfg.radius + 1e-6, self.cfg.radius - 1e-6)
+
+        #### ！！！！！######
+        position = (position + self.cfg.radius) / (2 * self.cfg.radius)
+        #### ！！！！！######
+
         coord["xy"] = position[..., [0, 1]]
         coord["xz"] = position[..., [0, 2]] 
         coord["yz"] = position[..., [1, 2]]
+
+        if self.cfg.upsample_triplane:
+            self.triplane_resolution = self.triplane_resolution * self.cfg.upsample_factor
+        else:
+            self.triplane_resolution = self.triplane_resolution
 
         for key in coord.keys():
             x = (coord[key] * self.triplane_resolution).long()
@@ -157,6 +181,13 @@ class SMPLXTriplaneEncoder(nn.Module):
             self.generate_plane_features(index["xz"], c), 
             self.generate_plane_features(index["yz"], c)
         ], dim=1).view(B, T, 3, -1, self.triplane_resolution, self.triplane_resolution)
+
+        # visualize_feature_maps(smplx_triplanes.squeeze(1), save_dir='./triplane_visualization', save_name='smplx_triplanes', batch_idx=0, num_channels=3, normalize=True)
+
+        if self.cfg.upsample_triplane:
+            smplx_triplanes = self.triplane_downsampler(smplx_triplanes.squeeze(1))
+            smplx_triplanes = smplx_triplanes.unsqueeze(1)
+            self.triplane_resolution = self.triplane_resolution // self.cfg.upsample_factor
 
         return smplx_triplanes, smpl_tokens, pred_smpl_params
     
@@ -247,6 +278,14 @@ class SMPLXTriplaneEncoder(nn.Module):
         
         vertices = output.vertices
 
+        B, N, _ = vertices.shape
+        faces = self.smplx_model.faces
+        face_verts = vertices[:, faces]  # [B, F, 3, 3]
+        face_centers = face_verts.mean(dim=2)  # [B, F, 3]
+        densified_verts = torch.cat([vertices, face_centers], dim=1)  # [B, N+F, 3]
+        
+        vertices = densified_verts
+
         return vertices
     
     
@@ -275,7 +314,7 @@ class FeatureFusionNetwork(nn.Module):
             cross_attention_dim=1536,
             norm_type="layer_norm",
             enable_memory_efficient_attention=False,
-            gradient_checkpointing=True
+            gradient_checkpointing=False
         )
 
         # self.transformer_self = Transformer1D_nn(
@@ -322,3 +361,44 @@ class FeatureFusionNetwork(nn.Module):
 
         return triplane_tokens, smpl_tokens
 
+class ConvNeXtBlock(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # Depthwise
+        self.norm = nn.LayerNorm(dim, eps=1e-6)
+        self.pwconv1 = nn.Linear(dim, 4 * dim)
+        self.act = nn.GELU()
+        self.pwconv2 = nn.Linear(4 * dim, dim)
+
+    def forward(self, x):
+        shortcut = x
+        x = self.dwconv(x)  # [B, C, H, W]
+        x = x.permute(0, 2, 3, 1)  # [B, H, W, C]
+        x = self.norm(x)
+        x = self.pwconv1(x)
+        x = self.act(x)
+        x = self.pwconv2(x)
+        x = x.permute(0, 3, 1, 2)  # [B, C, H, W]
+        return x + shortcut
+
+class TriplaneDownsampler(nn.Module):
+    def __init__(self, cfg: DictConfig):
+        super().__init__()
+        self.cfg = cfg
+        self.scale = cfg.upsample_factor
+        self.blocks = nn.ModuleList([
+            ConvNeXtBlock(cfg.triplane_feature_dim) for _ in range(2)
+        ])
+        self.down = nn.Conv2d(cfg.triplane_feature_dim, cfg.triplane_feature_dim, kernel_size=4, stride=self.scale, padding=1)
+
+    def forward(self, x):
+        # x: [B, 3, C, H, W]
+        B, P, C, H, W = x.shape
+        out_planes = []
+        for i in range(P):
+            plane = x[:, i]  # [B, C, H, W]
+            for blk in self.blocks:
+                plane = blk(plane)
+            down = self.down(plane)
+            out_planes.append(down)
+        return torch.stack(out_planes, dim=1)  # [B, 3, C, H//r, W//r]

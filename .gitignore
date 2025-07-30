@@ -35,3 +35,16 @@ baseline/LHM/*
 
 baseline/PantoMatrix/*
 !baseline/PantoMatrix/.gitkeep
+
+# 忽略runs目录（tensorboard日志）
+runs/
+
+# 忽略pytorch3d目录
+pytorch3d/
+LHM/
+
+# 忽略可视化输出文件
+triplane_visualization/
+vertex_color_visualization/
+*.ply
+visible_mask.png
