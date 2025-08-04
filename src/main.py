@@ -112,16 +112,18 @@ def main():
         # trainer.test(model, val_loader)
         
     elif args.mode == "test":
-        print(f"loading checkpoint: {cfg.training.ckpt}")
-        if cfg.training.resume and cfg.training.ckpt:
-            print(f"resume training from checkpoint: {cfg.training.ckpt}")
+        if cfg.training.ckpt is None:
+            raise ValueError("test mode requires checkpoint file path")
+        
+        print(f"resume training from checkpoint: {cfg.training.ckpt}")
 
-            checkpoint = torch.load(cfg.training.ckpt, weights_only=False, map_location='cpu')
-            if 'state_dict' in checkpoint:
-                triplane_gaussian_state_dict = {k.replace('triplane_gaussian.', ''): v for k, v in checkpoint['state_dict'].items() 
-                                          if k.startswith('triplane_gaussian.') and 'sapiens_encoder' not in k}
-                model.triplane_gaussian.load_state_dict(triplane_gaussian_state_dict, strict=False)
-            print("loaded model weights")
+        checkpoint = torch.load(cfg.training.ckpt, weights_only=False, map_location='cpu')
+        if 'state_dict' in checkpoint:
+            triplane_gaussian_state_dict = {k.replace('triplane_gaussian.', ''): v for k, v in checkpoint['state_dict'].items() 
+                                        if k.startswith('triplane_gaussian.') and 'sapiens_encoder' not in k}
+            model.triplane_gaussian.load_state_dict(triplane_gaussian_state_dict, strict=False)
+        print("loaded model weights")
+
         trainer.test(model, val_loader)
         
     elif args.mode == "predict":

@@ -4,6 +4,9 @@ from torch_scatter import scatter_mean, scatter_max
 from smplx import SMPLX
 import einops
 from omegaconf import DictConfig
+from pytorch3d.structures import Meshes
+from pytorch3d.ops import SubdivideMeshes
+import numpy as np
 
 from src.models.tokenizers import TriplaneLearnablePositionalEmbedding
 from src.models.transformers import Transformer1D_nn
@@ -54,6 +57,12 @@ class ResnetBlockFC(nn.Module):
 
         return x_s + dx
 
+# SUBDEVIDE_VERTS = {
+#     0: 10375,
+#     1: 40000,
+#     2: 60000,
+# }
+
 class SMPLXTriplaneEncoder(nn.Module):
     '''
     To encode a smpl-x mesh into a triplane
@@ -64,7 +73,13 @@ class SMPLXTriplaneEncoder(nn.Module):
         self.triplane_resolution = cfg.triplane_resolution
         self.feature_dim = cfg.triplane_feature_dim
         self.smplx_model = self.init_smplx_model()
-        self.num_verts = self.smplx_model.lbs_weights.shape[0]
+        self.init_smplx_subdivider(subdivide_steps=self.cfg.subdivide_steps)
+
+        if self.cfg.densify_smplx_verts:
+            self.num_verts = self.smplx_model.lbs_weights.shape[0] + self.smplx_model.faces.shape[0]
+            # self.num_verts = SUBDEVIDE_VERTS[self.cfg.subdivide_steps]
+        else: 
+            self.num_verts = self.smplx_model.lbs_weights.shape[0]
 
         self.fc_pos = nn.Linear(3 + cfg.triplane_feature_dim, 2 * cfg.triplane_feature_dim)
         self.blocks = nn.ModuleList([
@@ -97,8 +112,8 @@ class SMPLXTriplaneEncoder(nn.Module):
                 num_attention_heads=cfg.smplx_transformer_num_heads,
                 cross_attention_dim=cfg.image_feature_dim,
                 norm_type="layer_norm",
-                enable_memory_efficient_attention=False,
-                gradient_checkpointing=False
+                enable_memory_efficient_attention=True,
+                gradient_checkpointing=True
             )
                     
             self.smpl_decoder = smpl_decoder
@@ -128,16 +143,16 @@ class SMPLXTriplaneEncoder(nn.Module):
             cam_extrinsic = cam_params['extrinsic'].reshape(B*T, 4, 4)
             cam_intrinsic = cam_params['intrinsic'].reshape(B*T, 3, 3)
             sampled_features = points_projection(verts_with_trans, cam_extrinsic, cam_intrinsic, img_feature)
-            rgb = sampled_features[..., :3]
-            print(rgb.shape)
-            print(verts.shape)
+            # rgb = sampled_features[..., :3]
+            # print(rgb.shape)
+            # print(verts.shape)
 
-            # save verts and rgb as ply file
-            import open3d as o3d
-            pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(verts[0].cpu().numpy())
-            pcd.colors = o3d.utility.Vector3dVector(rgb[0].cpu().numpy())
-            o3d.io.write_point_cloud("verts_rgb.ply", pcd)
+            # # save verts and rgb as ply file
+            # import open3d as o3d
+            # pcd = o3d.geometry.PointCloud()
+            # pcd.points = o3d.utility.Vector3dVector(verts[0].cpu().numpy())
+            # pcd.colors = o3d.utility.Vector3dVector(rgb[0].cpu().numpy())
+            # o3d.io.write_point_cloud("verts_rgb.ply", pcd)
 
             verts_feat = torch.cat([verts_emb, sampled_features], dim=-1)
         else:
@@ -286,7 +301,39 @@ class SMPLXTriplaneEncoder(nn.Module):
         
         vertices = densified_verts
 
+        # if self.cfg.densify_smplx_verts:
+        #     faces = torch.as_tensor(self.smplx_model.faces.astype(np.int64),
+        #                     device=vertices.device)
+    
+        #     mesh = Meshes(verts=list(vertices), faces=[faces] * (B*T))
+            
+        #     for subdivider in self.subdivider_list:
+        #         mesh = subdivider(mesh)
+            
+        #     densified_vertices = mesh.verts_packed().view(B*T, -1, 3)
+
+        #     idx = torch.randperm(densified_vertices.shape[1])[:self.num_verts]
+        #     vertices = densified_vertices[:, idx, :]
+
         return vertices
+    
+    def init_smplx_subdivider(self, subdivide_steps=2):
+        """
+        Create a list of SubdivideMeshes objects for progressive subdivision.
+        subdivide_steps: how many times to subdivide (each step ~4x vertices)
+        """
+        verts_template = self.smplx_model.v_template.float().to(self.cfg.device)
+        faces_template = torch.as_tensor(self.smplx_model.faces.astype(np.int64),
+                                        device=self.cfg.device)
+        
+        mesh = Meshes(verts=[verts_template], faces=[faces_template])
+        
+        subdividers = [SubdivideMeshes(mesh)]
+        for _ in range(subdivide_steps - 1):
+            mesh = subdividers[-1](mesh)  # apply subdivision
+            subdividers.append(SubdivideMeshes(mesh))
+        
+        self.subdivider_list = subdividers
     
     
 class FeatureFusionNetwork(nn.Module):
@@ -313,8 +360,8 @@ class FeatureFusionNetwork(nn.Module):
             num_attention_heads=cfg.cross_transformer_num_heads,
             cross_attention_dim=1536,
             norm_type="layer_norm",
-            enable_memory_efficient_attention=False,
-            gradient_checkpointing=False
+            enable_memory_efficient_attention=True,
+            gradient_checkpointing=True
         )
 
         # self.transformer_self = Transformer1D_nn(

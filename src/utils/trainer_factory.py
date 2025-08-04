@@ -42,6 +42,7 @@ class TrainerFactory:
             enable_checkpointing=True,
             fast_dev_run=training_cfg.fast_dev_run if hasattr(training_cfg, 'fast_dev_run') else False,
             accumulate_grad_batches=training_cfg.gradient_accumulate_steps if hasattr(training_cfg, 'gradient_accumulate_steps') else 1,
+            gradient_clip_val=training_cfg.gradient_clip_val if hasattr(training_cfg, 'gradient_clip_val') else 1.0,
         )
         
         return trainer

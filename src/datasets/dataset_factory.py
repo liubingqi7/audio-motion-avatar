@@ -6,11 +6,12 @@ from omegaconf import DictConfig
 from .dataset_thuman import ThumanDataset
 from .dataset_idol import AvatarDataset
 from .dataset_speech_vid import GaussianAudioDataset
-from src.utils.data_utils import collate_fn_thuman_ori, collate_fn_speech
+from src.utils.data_utils import collate_fn_thuman_ori, collate_fn_speech, collate_fn_idol_ori
 
 DATASET_COLLATE_FN_MAP = {
     "ThumanDataset": collate_fn_thuman_ori,
     "GaussianAudioDataset": collate_fn_speech,
+    "IDOLDataset": collate_fn_idol_ori,
 }
 
 
@@ -34,7 +35,7 @@ class DatasetFactory:
         
         if dataset_type == "ThumanDataset":
             return DatasetFactory._create_thuman_dataset(cfg, split)
-        elif dataset_type == "AvatarDataset":
+        elif dataset_type == "IDOLDataset":
             return DatasetFactory._create_idol_dataset(cfg, split)
         elif dataset_type == "GaussianAudioDataset":
             return DatasetFactory._create_speech_vid_dataset(cfg, split)
@@ -69,30 +70,27 @@ class DatasetFactory:
     def _create_idol_dataset(cfg: DictConfig, split: str):
         """创建IDOL数据集"""
         dataset_cfg = cfg.dataset
-        
+        if split == "train":
+            cache_path = dataset_cfg.cache_path_train
+        elif split == "val":
+            cache_path = dataset_cfg.cache_path_val
+        elif split == "test":
+            cache_path = dataset_cfg.cache_path_test
+        else:
+            raise ValueError(f"unsupported split: {split}")
+
         return AvatarDataset(
             data_prefix=dataset_cfg.data_prefix,
-            cache_path=dataset_cfg.cache_path,
-            img_res=dataset_cfg.img_res,
-            radius=dataset_cfg.radius,
-            load_imgs=dataset_cfg.load_imgs,
-            load_norm=dataset_cfg.load_norm,
-            load_cond_data=dataset_cfg.load_cond_data,
-            load_test_data=dataset_cfg.load_test_data,
-            num_train_imgs=dataset_cfg.num_train_imgs,
-            max_num_scenes=dataset_cfg.max_num_scenes,
-            specific_observation_idcs=dataset_cfg.specific_observation_idcs,
+            cache_path=cache_path,
+            img_res=dataset_cfg.image_size,
             specific_observation_num=dataset_cfg.specific_observation_num,
             first_is_front=dataset_cfg.first_is_front,
             better_range=dataset_cfg.better_range,
-            random_test_imgs=dataset_cfg.random_test_imgs,
             if_include_video_ref_img=dataset_cfg.if_include_video_ref_img,
             prob_include_video_ref_img=dataset_cfg.prob_include_video_ref_img,
             allow_k_angles_near_the_front=dataset_cfg.allow_k_angles_near_the_front,
-            scene_id_as_name=dataset_cfg.scene_id_as_name,
             test_mode=dataset_cfg.test_mode,
-            step=dataset_cfg.step,
-            crop=dataset_cfg.crop
+            load_test_data=dataset_cfg.load_test_data
         )
     
     @staticmethod

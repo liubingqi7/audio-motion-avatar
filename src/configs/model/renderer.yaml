@@ -8,9 +8,12 @@ model:
     num_expression_coeffs: ${model.triplane_net.num_expression_coeffs}
     
     upsample_triplane: true
-    num_upsample_blocks: 3
+    num_upsample_blocks: 4
 
+    densify_smplx_verts: true
+    subdivide_steps: 2
     predict_smplx_params: true
+
     no_point_refiner: false
     use_gaussian_splatting: true
     gaussian_feature_dim: 256

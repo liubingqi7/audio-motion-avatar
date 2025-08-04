@@ -148,12 +148,12 @@ class TriplaneGaussianAvatarLightning(L.LightningModule):
             losses['ssim_test'] = torch.tensor(0.0, device=self.device)
             loss_test = torch.tensor(0.0, device=self.device)
 
-        pred_xyz = gaussians['xyz']
-        pcd_points = ref_batch.pcd_points.to(self.device)
-        chamfer_loss, _ = chamfer_distance(pred_xyz, pcd_points)
-        self.log('train/chamfer_loss', chamfer_loss, prog_bar=True)
+        # pred_xyz = gaussians['xyz']
+        # pcd_points = ref_batch.pcd_points.to(self.device)
+        # chamfer_loss, _ = chamfer_distance(pred_xyz, pcd_points)
+        # self.log('train/chamfer_loss', chamfer_loss, prog_bar=True)
 
-        loss = loss_train + loss_test + 0.01 * loss_smplx + 50 * chamfer_loss
+        loss = loss_train + loss_test + 0.01 * loss_smplx # + 50 * chamfer_loss
         
         self.log('train/l1_loss_train', losses['l1_train'], prog_bar=True)
         self.log('train/ssim_loss_train', losses['ssim_train'], prog_bar=False)

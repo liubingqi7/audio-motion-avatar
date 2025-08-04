@@ -69,8 +69,12 @@ def main():
     print(f"train dataset size: {len(train_loader.dataset)}")
     
     print("creating val dataloader...")
-    val_loader = DatasetFactory.create_dataloader(cfg, "test")
+    val_loader = DatasetFactory.create_dataloader(cfg, "val")
     print(f"val dataset size: {len(val_loader.dataset)}")
+
+    print("creating test dataloader...")
+    test_loader = DatasetFactory.create_dataloader(cfg, "test")
+    print(f"test dataset size: {len(test_loader.dataset)}")
     
     print("creating model...")
     model = AudioDrivenTriplaneAvatarLightning(cfg)
@@ -108,11 +112,13 @@ def main():
         if args.checkpoint is None:
             raise ValueError("test mode requires checkpoint file path")
         
-        print(f"loading checkpoint: {args.checkpoint}")
+        print(f"resume training from checkpoint: {cfg.training.ckpt}")
+        checkpoint = torch.load(cfg.training.ckpt)
+        model.load_state_dict(checkpoint['state_dict'], strict=False)
 
         print("loaded model weights")
 
-        trainer.test(model, val_loader)
+        trainer.test(model, test_loader)
         
     elif args.mode == "demo":
         if args.checkpoint is None:

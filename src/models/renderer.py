@@ -7,12 +7,23 @@ from src.models.point_transformer.point_encoder import PTv3Encoder
 import einops
 from src.utils.math_utils import inverse_sigmoid
 from src.utils.graphic_utils import visualize_feature_maps
+from pytorch3d.structures import Meshes
+from pytorch3d.ops import SubdivideMeshes
+import numpy as np
+
+SUBDEVIDE_VERTS = {
+    0: 10000,
+    1: 30000,
+    2: 30000,
+}
 
 class Renderer(nn.Module):
     def __init__(self, cfg: DictConfig = None, smpl_decoder=None):
         super(Renderer, self).__init__()
         self.cfg = cfg
         self.smplx_model = self.init_smplx_model()
+        self.num_verts = SUBDEVIDE_VERTS[self.cfg.subdivide_steps]
+        self.init_smplx_subdivider(subdivide_steps=self.cfg.subdivide_steps)
 
         if cfg.predict_smplx_params:
             self.smpl_decoder = smpl_decoder
@@ -60,6 +71,16 @@ class Renderer(nn.Module):
         nn.init.constant_(self.gaussian_decoder.shs_layer.bias, 0)
         
     def forward(self, triplane_features, cam_params, smpl_tokens=None, smpl_params_gt=None):
+        import time
+        
+        def print_memory_usage(stage_name):
+            torch.cuda.synchronize()
+            allocated = torch.cuda.memory_allocated() / 1024 / 1024  # MB
+            reserved = torch.cuda.memory_reserved() / 1024 / 1024  # MB
+            print(f"{stage_name} - 显存: {allocated:.1f}MB (已分配) / {reserved:.1f}MB (已保留)")
+        
+        print_memory_usage("开始")
+        
         B, T, _, _ = smpl_tokens.shape
         triplane_features = einops.rearrange(
             triplane_features,
@@ -69,14 +90,24 @@ class Renderer(nn.Module):
             Wp=self.cfg.triplane_resolution,
         )
 
+        # 监控triplane上采样时间
         if self.cfg.upsample_triplane:
+            start_time = time.time()
             triplane_features = self.triplane_upsampler(triplane_features)
+            upsample_time = time.time() - start_time
+            print(f"Triplane上采样用时: {upsample_time:.3f}s")
+            print_memory_usage("Triplane上采样后")
 
         # visualize_feature_maps(triplane_features, save_dir='./triplane_visualization', save_name='triplane_features', batch_idx=0, num_channels=3, normalize=True)
 
         smpl_tokens = einops.rearrange(smpl_tokens, 'b t c s -> (b t) c s')
         if self.smpl_decoder is not None:
+            start_time = time.time()
             pred_smpl_params = self.smpl_decoder(smpl_tokens)
+            smpl_decode_time = time.time() - start_time
+            print(f"SMPL解码用时: {smpl_decode_time:.3f}s")
+            print_memory_usage("SMPL解码后")
+            
             for key in pred_smpl_params.keys():
                 if key in ['betas', 'transl', 'global_orient', 'expression', 'jaw_pose', 'leye_pose', 'reye_pose']:
                     pred_smpl_params[key] = pred_smpl_params[key].reshape(B, T, -1)
@@ -91,17 +122,46 @@ class Renderer(nn.Module):
         else:
             smpl_params = pred_smpl_params
 
+        # 监控SMPL顶点生成时间
+        start_time = time.time()
         initial_points = self.get_smpl_vertices(smpl_params)  # [B, N, 3]
+        smpl_verts_time = time.time() - start_time
+        print(f"SMPL顶点生成用时: {smpl_verts_time:.3f}s, 顶点数量: {initial_points.shape[1]}")
+        print_memory_usage("SMPL顶点生成后")
+        
         B, N, _ = initial_points.shape
         
-        
+        # 监控triplane采样时间
+        start_time = time.time()
         initial_features = self.sample_from_triplane(triplane_features, initial_points)  # [B, N, C]
+        triplane_sample_time = time.time() - start_time
+        print(f"Triplane特征采样用时: {triplane_sample_time:.3f}s")
+        print_memory_usage("Triplane采样后")
+
+        # 监控point_encoder时间
+        start_time = time.time()
         point_features = self.point_encoder(initial_points, initial_features)  # [B, N, 256]
+        point_encoder_time = time.time() - start_time
+        print(f"Point Encoder用时: {point_encoder_time:.3f}s")
+        print_memory_usage("Point Encoder后")
+
+        # 监控point_refiner时间
+        start_time = time.time()
         point_offsets = self.point_refiner(point_features).reshape(B, N, 3)  # [B, N, 3]
         refined_points = initial_points + point_offsets  # [B, N, 3]
+        point_refine_time = time.time() - start_time
+        print(f"Point Refiner用时: {point_refine_time:.3f}s")
+        print_memory_usage("Point Refiner后")
         
+        # 监控第二次triplane采样时间
+        start_time = time.time()
         refined_features = self.sample_from_triplane(triplane_features, refined_points)  # [B, N, C]
+        triplane_sample2_time = time.time() - start_time
+        print(f"第二次Triplane采样用时: {triplane_sample2_time:.3f}s")
+        print_memory_usage("第二次Triplane采样后")
         
+        # 监控gaussian decoder时间
+        start_time = time.time()
         decoder_input = torch.cat([refined_points, refined_features], dim=-1)  # [B, N, 3+C]
         
         xyz_offset = self.gaussian_decoder.xyz_layer(decoder_input)  # [B, N, 3]
@@ -119,8 +179,24 @@ class Renderer(nn.Module):
         }
         
         gaussians = self.construct_gaussians(gaussian_params, refined_points, smpl_params)
+        gaussian_decode_time = time.time() - start_time
+        print(f"Gaussian Decoder用时: {gaussian_decode_time:.3f}s")
+        print_memory_usage("Gaussian Decoder后")
         
+        # 监控渲染时间
+        start_time = time.time()
         rendered_images = render_batch(gaussians, cam_params['intrinsic'], cam_params['extrinsic'], self.cfg, debug=False)
+        render_time = time.time() - start_time
+        print(f"渲染用时: {render_time:.3f}s")
+        print_memory_usage("渲染后")
+        
+        # 打印总用时
+        total_time = (upsample_time if self.cfg.upsample_triplane else 0) + \
+                    (smpl_decode_time if self.smpl_decoder is not None else 0) + \
+                    smpl_verts_time + triplane_sample_time + point_encoder_time + \
+                    point_refine_time + triplane_sample2_time + gaussian_decode_time + render_time
+        print(f"总用时: {total_time:.3f}s")
+        print("-" * 50)
         
         if self.cfg.predict_smplx_params:
             return rendered_images, gaussians, pred_smpl_params
@@ -147,6 +223,24 @@ class Renderer(nn.Module):
                             flat_hand_mean=self.cfg.flat_hand_mean,
                             num_expression_coeffs=self.cfg.num_expression_coeffs).to(self.cfg.device)
         return body_model
+    
+    def init_smplx_subdivider(self, subdivide_steps=2):
+        """
+        Create a list of SubdivideMeshes objects for progressive subdivision.
+        subdivide_steps: how many times to subdivide (each step ~4x vertices)
+        """
+        verts_template = self.smplx_model.v_template.float().to(self.cfg.device)
+        faces_template = torch.as_tensor(self.smplx_model.faces.astype(np.int64),
+                                        device=self.cfg.device)
+        
+        mesh = Meshes(verts=[verts_template], faces=[faces_template])
+        
+        subdividers = [SubdivideMeshes(mesh)]
+        for _ in range(subdivide_steps - 1):
+            mesh = subdividers[-1](mesh)  # apply subdivision
+            subdividers.append(SubdivideMeshes(mesh))
+        
+        self.subdivider_list = subdividers
     
     def get_smpl_vertices(self, smpl_params):
         B, T = smpl_params['global_orient'].shape[:2]
@@ -179,13 +273,19 @@ class Renderer(nn.Module):
         
         vertices = output.vertices
         
-        B, N, _ = vertices.shape
-        faces = self.smplx_model.faces
-        face_verts = vertices[:, faces]  # [B, F, 3, 3]
-        face_centers = face_verts.mean(dim=2)  # [B, F, 3]
-        densified_verts = torch.cat([vertices, face_centers], dim=1)  # [B, N+F, 3]
-        
-        vertices = densified_verts
+        if self.cfg.densify_smplx_verts:
+            faces = torch.as_tensor(self.smplx_model.faces.astype(np.int64),
+                            device=vertices.device)
+    
+            mesh = Meshes(verts=list(vertices), faces=[faces] * (B*T))
+            
+            for subdivider in self.subdivider_list:
+                mesh = subdivider(mesh)
+            
+            densified_vertices = mesh.verts_packed().view(B*T, -1, 3)
+            
+            idx = torch.randperm(densified_vertices.shape[1])[:self.num_verts]
+            vertices = densified_vertices[:, idx, :]
 
         return vertices
     

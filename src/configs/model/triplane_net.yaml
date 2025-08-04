@@ -6,7 +6,7 @@ model:
     smplx_model_path: "/home/liubingqi/work/data/SMPL_SMPLX/models_smplx_v1_1/models/smplx"
 
     upsample_triplane: false
-    upsample_factor: 4
+    upsample_factor: 3 #### 4
     
     smpl_token_len: 80
     smpl_token_dim: 256
@@ -24,5 +24,7 @@ model:
     flat_hand_mean: ${dataset.flat_hand_mean}
     num_expression_coeffs: ${dataset.num_expression_coeffs}
 
+    # densify_smplx_verts: true
+    # subdivide_steps: 2
     sample_feature: true
     predict_smplx_params: true  

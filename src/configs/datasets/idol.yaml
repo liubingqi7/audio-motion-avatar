@@ -1,40 +1,38 @@
 dataset:
   name: "idol"
-  type: "AvatarDataset"
+  type: "IDOLDataset"
   
   # 数据集路径配置
-  data_prefix: "/path/to/idol/dataset"
-  cache_path: "/path/to/idol/cache.npy"
-  
+  data_prefix: null
+  cache_path_train: [
+    "/disk2/liubingqi/work/data/IDOL/processed_data/flux_batch8_train_17483.npy",
+    "/disk2/liubingqi/work/data/IDOL/processed_data/flux_batch9_train_13425.npy"
+  ]
+  cache_path_val: [
+    "/disk2/liubingqi/work/data/IDOL/processed_data/flux_batch8_val_10.npy",
+    "/disk2/liubingqi/work/data/IDOL/processed_data/flux_batch9_val_10.npy"
+  ]
+  cache_path_test: [
+    "/disk2/liubingqi/work/data/IDOL/processed_data/flux_batch8_test_50.npy",
+    "/disk2/liubingqi/work/data/IDOL/processed_data/flux_batch9_test_50.npy"
+  ]
   # 图像配置
-  img_res: [640, 896]
-  radius: 1.0
-  
-  # 数据集参数
-  load_imgs: true
-  load_norm: false
-  load_cond_data: true
-  load_test_data: true
-  num_train_imgs: -1
-  max_num_scenes: -1
+  image_size: [896, 640]
   
   # 视角配置
-  specific_observation_idcs: null
-  specific_observation_num: null
-  first_is_front: false
-  better_range: false
-  random_test_imgs: false
+  specific_observation_num: 8
+  first_is_front: true
+  better_range: true
   
   # 视频参考图像配置
   if_include_video_ref_img: false
-  prob_include_video_ref_img: 0.2
-  allow_k_angles_near_the_front: 0
+  prob_include_video_ref_img: 0.0
+  allow_k_angles_near_the_front: 90
   
   # 其他配置
-  scene_id_as_name: false
   test_mode: false
-  step: 1
-  crop: false
-  
-  # 设备配置
-  device: "cuda" 
+  load_test_data: true 
+
+  # dataset specific parameters
+  flat_hand_mean: false
+  num_expression_coeffs: 10

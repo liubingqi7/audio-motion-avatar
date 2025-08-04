@@ -1008,8 +1008,8 @@ if __name__ == "__main__":
     params = {
         "data_prefix": None,
         "cache_path":  ListConfig([ 
-            "/disk2/liubingqi/data/IDOL/processed_data/flux_batch8_train_17483.npy",
-            "/disk2/liubingqi/data/IDOL/processed_data/flux_batch9_train_13425.npy"
+            "/disk2/liubingqi/work/data/IDOL/processed_data/flux_batch8_train_17483.npy",
+            "/disk2/liubingqi/work/data/IDOL/processed_data/flux_batch9_train_13425.npy"
             # "/home/liubingqi/work/data/IDOL/processed_data/flux_batch1_5000_train_145_local.npy",
             # "/home/liubingqi/work/data/IDOL/processed_data/flux_batch2_train_145_local.npy"
         ]),
@@ -1030,12 +1030,12 @@ if __name__ == "__main__":
     print(sample.keys())
     for k, v in sample['cond_smpl_params'][0].items():
         print(k, v.shape)
-    # print(sample['cond_imgs'].shape)
-    # print(sample['cond_smpl_param'].shape)
+    print(sample['cond_imgs'].shape)
+    print(sample['cond_smpl_param'].shape)
 
     # print(sample['cond_smpl_params'])
-    # print(sample['cond_intrinsics_matrix'].shape)
-    # print(sample['cond_poses'].shape)
+    print(sample['cond_intrinsics_matrix'].shape)
+    print(sample['cond_poses'].shape)
 
     # from src.utils.graphics_utils import init_smplx_model, SimpleMeshRenderer
     # smplx_model = init_smplx_model(device=sample['cond_imgs'].device,

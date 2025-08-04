@@ -1,9 +1,9 @@
 training:
   max_epochs: 500
   batch_size: 1
-  learning_rate: 1e-4
-  total_steps: 30000
-  gradient_accumulate_steps: 2
+  learning_rate: 5e-5
+  total_steps: 50000
+  gradient_accumulate_steps: 4
 
   optimizer:
     type: "Adam"
@@ -32,17 +32,17 @@ training:
     wandb_project: "audio_motion_avatar"
     wandb_run_name: null
 
-  output_dir: "outputs_reconstruction_729"
+  output_dir: "outputs_reconstruction_84"
   experiment_name: "triplane_reconstruction"
 
   device: "cuda"
-  devices: 3
+  devices: 1
   strategy: "ddp"
   accelerator: "gpu"
 
-  seed: 42
+  seed: 41
 
-  resume: true
-  ckpt: "/home/liubingqi/work/audio_motion_avatar/outputs_reconstruction_729/checkpoints/last-v1.ckpt"
+  resume: false
+  ckpt: "/home/liubingqi/work/audio_motion_avatar/outputs_reconstruction_729/checkpoints/last.ckpt"
 
   fast_dev_run: false
